@@ -65,6 +65,16 @@ using BcSel = BcSels::iterator;
 DECLARE_SOA_TABLE(EvSels, "AOD", "EVSEL", //!
                   evsel::Alias, evsel::Selection, evsel::Sel7, evsel::Sel8, evsel::FoundBCId, evsel::FoundFT0Id, evsel::FoundFV0Id, evsel::FoundFDDId, evsel::FoundZDCId);
 using EvSel = EvSels::iterator;
+
+namespace genevsel
+{
+DECLARE_SOA_BITMAP_COLUMN(Selection, selection, 64);                        //! Bitmask of selection flags (see EventSelectionParams.h for definitions)
+}
+
+// mccollision-joinable generated event selection decisions
+DECLARE_SOA_TABLE(GenEvSels, "AOD", "GENEVSEL", //!
+                  genevsel::Selection);
+using GenEvSel = GenEvSels::iterator;
 } // namespace o2::aod
 
 #endif // COMMON_DATAMODEL_EVENTSELECTION_H_

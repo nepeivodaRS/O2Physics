@@ -63,6 +63,11 @@ enum EventSelectionFlags {
   kNsel                // counter
 };
 
+enum GenEventSelectionFlags {
+  kIsINELgt0, // at least one charged particle in eta < 1
+  kIsINELgt1 // at least two charged particles in eta < 1
+};
+
 extern const char* selectionLabels[kNsel];
 
 } // namespace o2::aod::evsel

@@ -420,6 +420,7 @@ struct BcSelectionTask {
 struct EventSelectionTask {
   SliceCache cache;
   Produces<aod::EvSels> evsel;
+  Produces<aod::GenEvSels> genevsel;
   Configurable<std::string> syst{"syst", "PbPb", "pp, pPb, Pbp, PbPb, XeXe"}; // TODO determine from AOD metadata or from CCDB
   Configurable<int> muonSelection{"muonSelection", 0, "0 - barrel, 1 - muon selection with pileup cuts, 2 - muon selection without pileup cuts"};
   Configurable<float> maxDiffZvtxFT0vsPV{"maxDiffZvtxFT0vsPV", 1., "maximum difference (in cm) between z-vertex from FT0 and PV"};
@@ -695,6 +696,68 @@ struct EventSelectionTask {
     }
   }
   PROCESS_SWITCH(EventSelectionTask, processRun3, "Process Run3 event selection", false);
+
+  // Struct for counting charged particles in |eta| region
+  typedef struct EtaCharge {
+    double eta;
+    int charge;
+  } EtaCharge;
+
+  template <typename TMcParticles>
+  bool isINELgtNmc(TMcParticles particles, int nChToSatisfySelection)
+  {
+    // INEL > N (at least N+1 charged particles in |eta| < 1.0)
+    EtaCharge etaCharge;
+    std::vector<EtaCharge> ParticlesEtaAndCharge(particles.size());
+    unsigned int nParticles = 0;
+    for (const auto& particle : particles) {
+      if (particle.isPhysicalPrimary() == 0)
+        continue;           // consider only primaries
+      etaCharge = {999, 0}; // refresh init. for safety
+      TParticlePDG* p = pdgDB->GetParticle(particle.pdgCode());
+      if (!p) {
+        switch (std::to_string(particle.pdgCode()).length()) {
+          case 10: // nuclei
+          {
+            etaCharge = {particle.eta(), static_cast<int>(particle.pdgCode() / 10000 % 1000)};
+            ParticlesEtaAndCharge[nParticles++] = etaCharge;
+            break;
+          }
+          default:
+            break;
+        }
+      } else {
+        etaCharge = {particle.eta(), static_cast<int>(p->Charge())};
+        ParticlesEtaAndCharge[nParticles++] = etaCharge;
+      }
+    }
+
+    ParticlesEtaAndCharge.resize(nParticles);
+
+    auto etaChargeConditionFunc = [](EtaCharge elem) {
+      return ((TMath::Abs(elem.eta) < 1.0) && (TMath::Abs(elem.charge) > 0.001));
+    };
+
+    if (std::count_if(ParticlesEtaAndCharge.begin(), ParticlesEtaAndCharge.end(), etaChargeConditionFunc) > nChToSatisfySelection) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  Preslice<aod::McParticles> perMCCollision = aod::mcparticle::mcCollisionId;
+  void processRun3Gen(aod::McCollisions const& mcCollisions, aod::McParticles const& mcParticles)
+  {
+    genevsel.reserve(mcCollisions.size());
+    for (auto& mcCollision : mcCollisions) {
+      auto mcparticlesGrouped = mcParticles.sliceBy(perMCCollision, mcCollision.globalIndex());
+      uint64_t selection{0};
+      selection |= isINELgtNmc(mcparticlesGrouped, 0) ? BIT(kIsINELgt0) : 0;
+      selection |= isINELgtNmc(mcparticlesGrouped, 1) ? BIT(kIsINELgt1) : 0;
+      genevsel(selection);
+    }
+  }
+  PROCESS_SWITCH(EventSelectionTask, processRun3Gen, "Process Run3 event selection on generated level", false);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
