@@ -65,11 +65,11 @@ using NeutronsMC = soa::Join<aod::ZDCNMCCollRefs, aod::ZDCNeutrons>;
 
 using CascMCCoresFull = soa::Join<aod::CascMCCores, aod::CascMCCollRefs>;
 
-using StraCollisonsFull = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraStamps>;
-using StraCollisonFull = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraStamps>::iterator;
+using StraCollisonsFull = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraEvSelExtras, aod::StraStamps>;
+using StraCollisonFull = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraEvSelExtras, aod::StraStamps>::iterator;
 
-using StraCollisonsFullMC = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraStamps, aod::StraCollLabels>;
-using StraCollisonFullMC = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraStamps, aod::StraCollLabels>::iterator;
+using StraCollisonsFullMC = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraEvSelExtras, aod::StraStamps, aod::StraCollLabels>;
+using StraCollisonFullMC = soa::Join<aod::StraCollisions, aod::StraCents, aod::StraEvSels, aod::StraEvSelExtras, aod::StraStamps, aod::StraCollLabels>::iterator;
 
 using StraMCCollisionsFull = soa::Join<aod::StraMCCollisions, aod::StraMCCollMults>;
 using V0MCCoresFull = soa::Join<aod::V0MCCores, aod::V0MCCollRefs>;
@@ -168,6 +168,8 @@ struct Derivedupcanalysis {
     Configurable<float> ft0a{"ft0a", 100., "FT0A threshold"};
     Configurable<float> ft0c{"ft0c", 50., "FT0C threshold"};
     Configurable<float> zdc{"zdc", 1., "ZDC threshold"};
+    Configurable<float> zdcTimeCut{"zdcTimeCut", 2., "ZDC timing cut (ns)"};
+    Configurable<bool> requireZDCTiming{"requireZDCTiming", true, "require valid ZDC timing for gap-side selection"};
     Configurable<int> genGapSide{"genGapSide", 0, "0 -- A, 1 -- C, 2 -- double"};
   } upcCuts;
 
@@ -213,6 +215,7 @@ struct Derivedupcanalysis {
     ConfigurableAxis axisFDDCampl{"axisFDDCampl", {100, 0.0f, 2000.0f}, "FDDCamplitude"};
     ConfigurableAxis axisZNAampl{"axisZNAampl", {100, 0.0f, 250.0f}, "ZNAamplitude"};
     ConfigurableAxis axisZNCampl{"axisZNCampl", {100, 0.0f, 250.0f}, "ZNCamplitude"};
+    ConfigurableAxis axisZdcTime{"axisZdcTime", {100, -10.0f, 10.0f}, "ZDC time (ns)"};
   } axisDetectors;
 
   // for MC
@@ -268,7 +271,7 @@ struct Derivedupcanalysis {
   ConfigurableAxis axisOccupancy{"axisOccupancy", {VARIABLE_WIDTH, 0.0f, 250.0f, 500.0f, 750.0f, 1000.0f, 1500.0f, 2000.0f, 3000.0f, 4500.0f, 6000.0f, 8000.0f, 10000.0f, 50000.0f}, "Occupancy"};
 
   // UPC axes
-  ConfigurableAxis axisSelGap{"axisSelGap", {4, -1.5, 2.5}, "Gap side"};
+  ConfigurableAxis axisSelGap{"axisSelGap", {7, -1.5, 5.5}, "Gap side"};
 
   // AP plot axes
   ConfigurableAxis axisAPAlpha{"axisAPAlpha", {220, -1.1f, 1.1f}, "V0 AP alpha"};
@@ -931,6 +934,7 @@ struct Derivedupcanalysis {
     histos.add("eventQA/hFT0", "hFT0", kTH3D, {axisDetectors.axisFT0Aampl, axisDetectors.axisFT0Campl, axisSelGap});
     histos.add("eventQA/hFDD", "hFDD", kTH3D, {axisDetectors.axisFDDAampl, axisDetectors.axisFDDCampl, axisSelGap});
     histos.add("eventQA/hZN", "hZN", kTH3D, {axisDetectors.axisZNAampl, axisDetectors.axisZNCampl, axisSelGap});
+    histos.add("eventQA/hZNTime", "hZNTime", kTH3D, {axisDetectors.axisZdcTime, axisDetectors.axisZdcTime, axisSelGap});
 
     if (doprocessGenerated) {
       histos.add("eventQA/mc/hEventSelectionMC", "hEventSelectionMC", kTH3D, {{3, -0.5, 2.5}, axisNTracksPVeta1, axisGeneratorIds});
@@ -955,7 +959,7 @@ struct Derivedupcanalysis {
       histos.add("eventQA/mc/hNTracksPVeta1vsMCNParticlesEta10rec", "hNTracksPVeta1vsMCNParticlesEta10rec", kTH2D, {axisNTracksPVeta1, axisNTracksPVeta1});
       histos.add("eventQA/mc/hNTracksGlobalvstotalMultMCParticles", "hNTracksGlobalvstotalMultMCParticles", kTH2D, {axisNTracksGlobal, axisNchInvMass});
       histos.add("eventQA/mc/hNTracksPVeta1vstotalMultMCParticles", "hNTracksPVeta1vstotalMultMCParticles", kTH2D, {axisNTracksPVeta1, axisNchInvMass});
-      histos.add("eventQA/hSelGapSideNoNeutrons", "Selected gap side (no n); Entries", kTH1D, {{5, -0.5, 4.5}});
+      histos.add("eventQA/hSelGapSideNoNeutrons", "Selected gap side (no n); Entries", kTH1D, {axisSelGap});
     }
 
     if (doprocessV0sMC) {
@@ -1053,6 +1057,42 @@ struct Derivedupcanalysis {
   int getGapSide(TCollision const& collision)
   {
     int selGapSide = sgSelector.trueGap(collision, upcCuts.fv0a, upcCuts.ft0a, upcCuts.ft0c, upcCuts.zdc);
+    if (!upcCuts.requireZDCTiming) {
+      return selGapSide;
+    }
+
+    if (selGapSide == o2::aod::sgselector::SingleGapA ||
+        selGapSide == o2::aod::sgselector::SingleGapC ||
+        selGapSide == o2::aod::sgselector::DoubleGap) {
+
+      const float timeZNA = collision.timeZNA();
+      const float timeZNC = collision.timeZNC();
+      const float cut = upcCuts.zdcTimeCut;
+
+      auto isInvalidTime = [](float time) {
+        return !std::isfinite(time) || (std::abs(time) == 999.f);
+      };
+
+      const bool gapA = isInvalidTime(timeZNA) || (std::abs(timeZNA) > cut);
+      const bool gapC = isInvalidTime(timeZNC) || (std::abs(timeZNC) > cut);
+      const bool neutronA = !isInvalidTime(timeZNA) && (std::abs(timeZNA) < cut);
+      const bool neutronC = !isInvalidTime(timeZNC) && (std::abs(timeZNC) < cut);
+
+      if (selGapSide == o2::aod::sgselector::SingleGapA) { // 0nXn
+        if (!(gapA && neutronC)) {
+          selGapSide = o2::aod::sgselector::NoGap;
+        }
+      } else if (selGapSide == o2::aod::sgselector::SingleGapC) { // Xn0n
+        if (!(neutronA && gapC)) {
+          selGapSide = o2::aod::sgselector::NoGap;
+        }
+      } else if (selGapSide == o2::aod::sgselector::DoubleGap) {
+        if (!(gapA && gapC)) {
+          selGapSide = o2::aod::sgselector::NoGap;
+        }
+      }
+    }
+
     return selGapSide;
   }
 
@@ -1099,6 +1139,11 @@ struct Derivedupcanalysis {
       histos.fill(HIST("eventQA/hZN"), -2, -2, gap);
     else if (zna == -999 || znc == -999)
       LOG(warning) << "Only one ZDC signal is -999";
+    else {
+      histos.fill(HIST("eventQA/hZN"), zna, znc, gap);
+    }
+
+    histos.fill(HIST("eventQA/hZNTime"), collision.timeZNA(), collision.timeZNC(), gap);
   }
 
   template <typename TCollision>
