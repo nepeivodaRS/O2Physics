@@ -99,7 +99,7 @@ struct Derivedupcanalysis {
     Configurable<bool> requireIsVertexTOFmatched{"requireIsVertexTOFmatched", false, "require events with at least one of vertex contributors matched to TOF"};
     Configurable<bool> requireIsVertexTRDmatched{"requireIsVertexTRDmatched", false, "require events with at least one of vertex contributors matched to TRD"};
     Configurable<bool> requireNoCollInTimeRangeStd{"requireNoCollInTimeRangeStd", false, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
-    Configurable<bool> requireNoCollInTimeRangeNarrow{"requireNoCollInTimeRangeNarrow", true, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
+    Configurable<bool> requireNoCollInTimeRangeNarrow{"requireNoCollInTimeRangeNarrow", false, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
     Configurable<bool> studyUPConly{"studyUPConly", true, "is UPC-only analysis"};
     Configurable<bool> useUPCflag{"useUPCflag", false, "select UPC flagged events"};
 
@@ -215,7 +215,7 @@ struct Derivedupcanalysis {
     ConfigurableAxis axisFDDCampl{"axisFDDCampl", {100, 0.0f, 2000.0f}, "FDDCamplitude"};
     ConfigurableAxis axisZNAampl{"axisZNAampl", {100, 0.0f, 250.0f}, "ZNAamplitude"};
     ConfigurableAxis axisZNCampl{"axisZNCampl", {100, 0.0f, 250.0f}, "ZNCamplitude"};
-    ConfigurableAxis axisZdcTime{"axisZdcTime", {100, -10.0f, 10.0f}, "ZDC time (ns)"};
+    ConfigurableAxis axisZdcTime{"axisZdcTime", {110, -12.5f, 10.0f}, "ZDC time (ns)"};
   } axisDetectors;
 
   // for MC
@@ -1054,13 +1054,11 @@ struct Derivedupcanalysis {
   }
 
   template <typename TCollision>
-  int getGapSide(TCollision const& collision)
+  int applyZDCTiming(int selGapSide, TCollision const& collision)
   {
-    int selGapSide = sgSelector.trueGap(collision, upcCuts.fv0a, upcCuts.ft0a, upcCuts.ft0c, upcCuts.zdc);
     if (!upcCuts.requireZDCTiming) {
       return selGapSide;
     }
-
     if (selGapSide == o2::aod::sgselector::SingleGapA ||
         selGapSide == o2::aod::sgselector::SingleGapC ||
         selGapSide == o2::aod::sgselector::DoubleGap) {
@@ -1094,6 +1092,13 @@ struct Derivedupcanalysis {
     }
 
     return selGapSide;
+  }
+
+  template <typename TCollision>
+  int getGapSide(TCollision const& collision)
+  {
+    int selGapSide = sgSelector.trueGap(collision, upcCuts.fv0a, upcCuts.ft0a, upcCuts.ft0c, upcCuts.zdc);
+    return applyZDCTiming(selGapSide, collision);
   }
 
   template <typename TCollision>
