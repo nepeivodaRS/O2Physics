@@ -76,7 +76,6 @@ using V0MCCoresFull = soa::Join<aod::V0MCCores, aod::V0MCCollRefs>;
 
 struct Derivedupcanalysis {
   HistogramRegistry histos{"Histos", {}, OutputObjHandlingPolicy::AnalysisObject};
-
   // master analysis switches
   Configurable<bool> analyseK0Short{"analyseK0Short", true, "process K0Short-like candidates"};
   Configurable<bool> analyseLambda{"analyseLambda", true, "process Lambda-like candidates"};
@@ -99,7 +98,7 @@ struct Derivedupcanalysis {
     Configurable<bool> requireIsVertexTOFmatched{"requireIsVertexTOFmatched", false, "require events with at least one of vertex contributors matched to TOF"};
     Configurable<bool> requireIsVertexTRDmatched{"requireIsVertexTRDmatched", false, "require events with at least one of vertex contributors matched to TRD"};
     Configurable<bool> requireNoCollInTimeRangeStd{"requireNoCollInTimeRangeStd", false, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
-    Configurable<bool> requireNoCollInTimeRangeNarrow{"requireNoCollInTimeRangeNarrow", false, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
+    Configurable<bool> requireNoCollInTimeRangeNarrow{"requireNoCollInTimeRangeNarrow", true, "reject collisions corrupted by the cannibalism, with other collisions within +/- 10 microseconds"};
     Configurable<bool> studyUPConly{"studyUPConly", true, "is UPC-only analysis"};
     Configurable<bool> useUPCflag{"useUPCflag", false, "select UPC flagged events"};
 
@@ -935,6 +934,7 @@ struct Derivedupcanalysis {
     histos.add("eventQA/hFDD", "hFDD", kTH3D, {axisDetectors.axisFDDAampl, axisDetectors.axisFDDCampl, axisSelGap});
     histos.add("eventQA/hZN", "hZN", kTH3D, {axisDetectors.axisZNAampl, axisDetectors.axisZNCampl, axisSelGap});
     histos.add("eventQA/hZNTime", "hZNTime", kTH3D, {axisDetectors.axisZdcTime, axisDetectors.axisZdcTime, axisSelGap});
+    histos.add("eventQA/hZNTimePreSel", "hZNTimePreSel", kTH2D, {axisDetectors.axisZdcTime, axisDetectors.axisZdcTime});
 
     if (doprocessGenerated) {
       histos.add("eventQA/mc/hEventSelectionMC", "hEventSelectionMC", kTH3D, {{3, -0.5, 2.5}, axisNTracksPVeta1, axisGeneratorIds});
@@ -1097,8 +1097,19 @@ struct Derivedupcanalysis {
   template <typename TCollision>
   int getGapSide(TCollision const& collision)
   {
-    int selGapSide = sgSelector.trueGap(collision, upcCuts.fv0a, upcCuts.ft0a, upcCuts.ft0c, upcCuts.zdc);
+    int selGapSide = o2::aod::sgselector::NoGap;
+    selGapSide = sgSelector.trueGap(collision, upcCuts.fv0a, upcCuts.ft0a, upcCuts.ft0c, upcCuts.zdc);
     return applyZDCTiming(selGapSide, collision);
+  }
+  float sanitizeZdcTime(float time) const
+  {
+    if (time == -999.f) {
+      return -11.f;
+    }
+    if (!std::isfinite(time)) {
+      return -12.f;
+    }
+    return time;
   }
 
   template <typename TCollision>
@@ -1148,7 +1159,7 @@ struct Derivedupcanalysis {
       histos.fill(HIST("eventQA/hZN"), zna, znc, gap);
     }
 
-    histos.fill(HIST("eventQA/hZNTime"), collision.timeZNA(), collision.timeZNC(), gap);
+    histos.fill(HIST("eventQA/hZNTime"), sanitizeZdcTime(collision.timeZNA()), sanitizeZdcTime(collision.timeZNC()), gap);
   }
 
   template <typename TCollision>
@@ -1918,13 +1929,13 @@ struct Derivedupcanalysis {
           }
         }
 
-        if (evSels.studyUPConly && (selGapSide != static_cast<int>(upcCuts.genGapSide)))
-          continue;
+        const bool passStd = !evSels.studyUPConly || (selGapSide == static_cast<int>(upcCuts.genGapSide));
+        if (passStd) {
+          ++nCollisions;
+          atLeastOne = true;
+        }
 
-        ++nCollisions;
-        atLeastOne = true;
-
-        if (biggestNContribs < collision.multPVTotalContributors()) {
+        if (passStd && biggestNContribs < collision.multPVTotalContributors()) {
           biggestNContribs = collision.multPVTotalContributors();
           if (static_cast<int>(upcCuts.genGapSide) == 0) {
             ft0ampl = collision.totalFT0AmplitudeC();
@@ -1996,6 +2007,9 @@ struct Derivedupcanalysis {
         continue;
       } // event is accepted
 
+      if (collision.isUPC()) {
+        histos.fill(HIST("eventQA/hZNTimePreSel"), sanitizeZdcTime(collision.timeZNA()), sanitizeZdcTime(collision.timeZNC()));
+      }
       histos.fill(HIST("eventQA/hRawGapSide"), collision.gapSide());
 
       int selGapSide = collision.isUPC() ? getGapSide(collision) : -1;
@@ -2052,6 +2066,9 @@ struct Derivedupcanalysis {
         continue;
       } // event is accepted
 
+      if (collision.isUPC()) {
+        histos.fill(HIST("eventQA/hZNTimePreSel"), sanitizeZdcTime(collision.timeZNA()), sanitizeZdcTime(collision.timeZNC()));
+      }
       histos.fill(HIST("eventQA/hRawGapSide"), collision.gapSide());
 
       int selGapSide = collision.isUPC() ? getGapSide(collision) : -1;
@@ -2137,6 +2154,9 @@ struct Derivedupcanalysis {
         continue;
       } // event is accepted
 
+      if (collision.isUPC()) {
+        histos.fill(HIST("eventQA/hZNTimePreSel"), sanitizeZdcTime(collision.timeZNA()), sanitizeZdcTime(collision.timeZNC()));
+      }
       histos.fill(HIST("eventQA/hRawGapSide"), collision.gapSide());
 
       int selGapSide = collision.isUPC() ? getGapSide(collision) : -1;
@@ -2189,6 +2209,9 @@ struct Derivedupcanalysis {
         continue;
       } // event is accepted
 
+      if (collision.isUPC()) {
+        histos.fill(HIST("eventQA/hZNTimePreSel"), sanitizeZdcTime(collision.timeZNA()), sanitizeZdcTime(collision.timeZNC()));
+      }
       histos.fill(HIST("eventQA/hRawGapSide"), collision.gapSide());
 
       int selGapSide = collision.isUPC() ? getGapSide(collision) : -1;
